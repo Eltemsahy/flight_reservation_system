@@ -1,14 +1,12 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Navbar from "../components/Navbar";
 import FlightSearchForm from '../components/FlightSearchForm';
 import { Dropdown, Card, CardGroup, Carousel, Ratio, Accordion, Container, Row, Col, Button, Form, InputGroup, } from 'react-bootstrap';
 import "../App.css";
-//import InteractionTracker from '../services/InteractionTracker';    //related to the heatmap generation, in case I forget where it was
 import {
   FaPlane, FaFacebookF, FaTwitter, FaInstagram, FaLinkedinIn, FaEnvelope, FaPhoneAlt, FaMapMarkerAlt, } from "react-icons/fa";
 
 const App = () => {
-  const [expanded, setExpanded] = useState({faq1: false, faq2: false});
   const faqs = [
     {
       question: "How do I book a flight?",
@@ -43,7 +41,6 @@ const App = () => {
   ];
   return (
     <>
-    {/* <InteractionTracker /> */} {/*related to the heatmap generation, in server directory*/}
       <Navbar />
       <div className="parent">
         <div className="div1 photo-container">
@@ -90,13 +87,6 @@ const App = () => {
           <FlightSearchForm />
         </div>
       </div>
-      {/* heatmap generation code, in case I forget where it was */}
-      {/* <img 
-        src={`http://127.0.0.1:5000/static/heatmap.png?t=${Date.now()}`} 
-        alt="User Heatmap" 
-        style={{ width: "500px", border: "2px solid black" }}
-      /> */}
-
 {/* ========================= RECOMMENDED FLIGHTS CAROUSEL ========================= */}
 
 <section

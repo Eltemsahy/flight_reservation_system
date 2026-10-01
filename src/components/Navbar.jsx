@@ -3,33 +3,9 @@ import { Link } from "react-router-dom";
 import { Dropdown, Offcanvas, Button, Modal, Alert, Tabs, Tab, Form } from 'react-bootstrap';
 import * as formik from 'formik';
 import * as yup from 'yup';
-import axios from 'axios';
-//import jwt_decode from 'jwt-decode';
-//import { useAuth } from '../contexts/AuthContext';
-
-
-const api = axios.create({
-  baseURL: 'http://127.0.0.1:8000', // Base URL for all requests
-  timeout: 5000,
-});
+import { loginUser, registerUser, getUserProfile, logoutUser } from '../services/API';
 
 const Navbar = () => {
-
-  //for testing>>>
-  useEffect(() => {
-    console.log("Testing backend connection..."); 
-    axios.get('http://127.0.0.1:8000/')
-      .then(res => console.log("Backend response:", res.data))
-      .catch(err => {
-        console.error("Connection error:", {
-          message: err.message,
-          code: err.code,
-          status: err.response?.status,
-          data: err.response?.data
-        });
-      });
-  }, []);
-
   // State management
   const [showOffcanvas, setShowOffcanvas] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -37,8 +13,6 @@ const Navbar = () => {
   const [authError, setAuthError] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-  const [isRegistering, setIsRegistering] = useState(false);
-
   // Form validation schemas
   const { Formik } = formik;
 
@@ -67,27 +41,24 @@ const Navbar = () => {
       .required('Please confirm your password')
   });
 
-  // Auth handlers
-  //const { user, isAuthenticated, login, logout } = useAuth();
+  useEffect(() => {
+    if (!localStorage.getItem('authToken')) return;
+    getUserProfile()
+      .then(({ data }) => {
+        setIsLoggedIn(true);
+        setCurrentUser(data.username);
+      })
+      .catch(() => logoutUser());
+  }, []);
+
   const handleLogin = async (values, { setSubmitting }) => {
     try {
-      const params = new URLSearchParams();
-      params.append('username', values.username);
-      params.append('password', values.password);
-  
-      const response = await axios.post('http://127.0.0.1:8000/token', params, {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
-  
-      localStorage.setItem('authToken', response.data.access_token);
+      const response = await loginUser(values.username, values.password);
       setIsLoggedIn(true);
-      setCurrentUser(values.username);
+      setCurrentUser(response.username);
       setShowAuthModal(false);
-      
     } catch (error) {
-      setAuthError(error.response?.data?.detail || 'Invalid credentials');
+      setAuthError(error.message || 'Invalid credentials');
     } finally {
       setSubmitting(false);
     }
@@ -95,54 +66,17 @@ const Navbar = () => {
 
   const handleRegister = async (values, { setSubmitting }) => {
     try {
-      console.log("Registration payload:", {
+      await registerUser({
         username: values.username,
         email: values.email,
         password: values.password
       });
-  
-      const response = await axios.post('http://127.0.0.1:8000/register/', {
-        username: values.username,
-        email: values.email,
-        password: values.password
-      }, {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-  
-      console.log("Registration response:", response.data);
-  
-      // If successful, auto-login
-      const loginResponse = await axios.post('http://127.0.0.1:8000/token', 
-        new URLSearchParams({
-          username: values.username,
-          password: values.password
-        }), {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
-          }
-        }
-      );
-  
-      localStorage.setItem('authToken', loginResponse.data.access_token);
+      const response = await loginUser(values.username, values.password);
       setIsLoggedIn(true);
-      setCurrentUser(values.username);
+      setCurrentUser(response.username);
       setShowAuthModal(false);
-      
     } catch (error) {
-      console.error("Full registration error:", error);
-      console.error("Response data:", error.response?.data);
-      console.error("Response status:", error.response?.status);
-      
-      let errorMessage = 'Registration failed. Please try again.';
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      setAuthError(errorMessage);
+      setAuthError(error.message || 'Registration failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -151,7 +85,7 @@ const Navbar = () => {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setCurrentUser(null);
-    localStorage.removeItem('authToken');
+    logoutUser();
   };
 
   const handleOffcanvasClose = () => setShowOffcanvas(false);

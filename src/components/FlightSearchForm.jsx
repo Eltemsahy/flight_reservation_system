@@ -3,10 +3,10 @@ import { Dropdown } from 'react-bootstrap';
 import flatpickr from 'flatpickr';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'flatpickr/dist/flatpickr.min.css';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { getAirports } from '../services/API';
 
-const FlightSearchForm = ({ onSearchResults }) => {
+const FlightSearchForm = () => {
   const [searchParams, setSearchParams] = useState({
     departure_code: '',
     destination_code: '',
@@ -22,11 +22,7 @@ const FlightSearchForm = ({ onSearchResults }) => {
   useEffect(() => {
     const fetchAirports = async () => {
       try {
-        const response = await axios.get('http://127.0.0.1:8000/airports/', {
-          params: {
-            include_country: true
-          }
-        });
+        const response = await getAirports();
         setAirports(response.data);
       } catch (error) {
         console.error('Error fetching airports:', error);

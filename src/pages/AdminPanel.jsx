@@ -19,40 +19,40 @@ const AdminPanel = () => {
     countries: {
       fields: ['code', 'name', 'continent', 'official_language', 'is_schengen_zone_member'],
       required: ['code', 'name'],
-      endpoint: '/countries/'
+      endpoint: '/countries'
     },
     airports: {
       fields: ['code', 'name', 'location', 'country_code', 'number_of_terminals'],
       required: ['code', 'name', 'country_code'],
-      endpoint: '/airports/'
+      endpoint: '/airports'
     },
     airlines: {
       fields: ['name', 'iata_code', 'icao_code', 'headquarters', 'year_founded', 'base_airport_code'],
       required: ['name', 'iata_code', 'icao_code', 'base_airport_code'],
-      endpoint: '/airlines/'
+      endpoint: '/airlines'
     },
     flights: {
       fields: ['flight_number', 'departure_code', 'destination_code', 'departure_time', 
                'arrival_time', 'total_seats', 'gate', 'terminal', 'airline_id', 'days_of_operation'],
       required: ['flight_number', 'departure_code', 'destination_code', 'departure_time', 'arrival_time'],
-      endpoint: '/flights/'
+      endpoint: '/flights'
     },
     passengers: {
       fields: ['name', 'national_id', 'email', 'phone_number', 'nationality', 'is_vip', 
                'address', 'date_of_birth', 'passport_number', 'gender', 'frequent_flyer_number'],
       required: ['name', 'national_id', 'email', 'phone_number', 'nationality'],
-      endpoint: '/passengers/'
+      endpoint: '/passengers'
     },
     promotions: {
       fields: ['promo_id', 'description', 'discount_percentage', 'start_date', 'end_date', 
                'promo_code', 'min_purchase', 'max_discount', 'usage_limit'],
       required: ['promo_id', 'description', 'discount_percentage', 'start_date', 'end_date'],
-      endpoint: '/promotions/'
+      endpoint: '/promotions'
     },
     users: {
       fields: ['username', 'email', 'role', 'is_active'],
       required: ['username', 'email'],
-      endpoint: '/users/'
+      endpoint: '/users'
     }
   };
 
@@ -65,11 +65,10 @@ const AdminPanel = () => {
 
   const fetchItems = async () => {
     try {
-      let url = entityConfig[activeTab].endpoint;
-      if (activeTab === 'users' && searchTerm) {
-        url += `?search=${encodeURIComponent(searchTerm)}`;
-      }
-      const response = await api.get(url);
+      const params = activeTab === 'users' && searchTerm
+        ? { or: `(username.ilike.*${searchTerm}*,email.ilike.*${searchTerm}*)`, limit: 100 }
+        : {};
+      const response = await api.get(entityConfig[activeTab].endpoint, { params });
       setItems(response.data);
     } catch (err) {
       setError(`Failed to fetch ${activeTab}: ${err.response?.data?.detail || err.message}`);
@@ -158,29 +157,36 @@ const AdminPanel = () => {
     });
     try {
       // Use correct identifier for PUT/DELETE
-      const identifier = modalData.id || modalData.code || modalData.promo_id;
-      if (identifier) {
-        await api.put(
-          `${entityConfig[activeTab].endpoint}${identifier}`,
-          dataToSend
-        );
+      const identifierField = activeTab === 'countries' || activeTab === 'airports'
+        ? 'code'
+        : activeTab === 'promotions'
+          ? 'promo_id'
+          : 'id';
+      const identifier = modalData[identifierField];
+      if (activeTab === 'users' && !identifier) {
+        await api.post('/rpc/admin_create_user', {
+          username: dataToSend.username,
+          email: dataToSend.email,
+          password: formData.password,
+          role: dataToSend.role || 'User',
+        });
+        setSuccess('User created successfully');
+      } else if (identifier) {
+        if (activeTab === 'users') delete dataToSend.password;
+        await api.patch(entityConfig[activeTab].endpoint, dataToSend, {
+          params: { [identifierField]: `eq.${identifier}` },
+        });
         setSuccess(`${activeTab.slice(0, -1)} updated successfully`);
       } else {
-        await api.post(
-          entityConfig[activeTab].endpoint,
-          dataToSend
-        );
+        await api.post(entityConfig[activeTab].endpoint, dataToSend, {
+          headers: { Prefer: 'return=representation' },
+        });
         setSuccess(`${activeTab.slice(0, -1)} created successfully`);
       }
       fetchItems();
       setShowModal(false);
     } catch (err) {
-        let detail = err.response?.data?.detail;
-        if (typeof detail === 'object') {
-          // FastAPI validation errors
-          detail = detail.map(d => d.msg).join('; ');
-        }
-        setError(`Operation failed: ${detail || err.message}`);
+        setError(`Operation failed: ${err.response?.data?.message || err.response?.data?.details || err.message}`);
       }
   };
   
@@ -192,10 +198,17 @@ const AdminPanel = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (idOrCodeOrPromoId) => {
+  const handleDelete = async (item) => {
     if (window.confirm('Are you sure you want to delete this item?')) {
       try {
-        await api.delete(`${entityConfig[activeTab].endpoint}${idOrCodeOrPromoId}`);
+        const identifierField = activeTab === 'countries' || activeTab === 'airports'
+          ? 'code'
+          : activeTab === 'promotions'
+            ? 'promo_id'
+            : 'id';
+        await api.delete(entityConfig[activeTab].endpoint, {
+          params: { [identifierField]: `eq.${item[identifierField]}` },
+        });
         setSuccess(`${activeTab.slice(0, -1)} deleted successfully`);
         fetchItems();
       } catch (err) {
@@ -241,7 +254,7 @@ const AdminPanel = () => {
                 <Button variant="primary" size="sm" onClick={() => handleEdit(item)}>
                   Edit
                 </Button>{' '}
-                <Button variant="danger" size="sm" onClick={() => handleDelete(item.id || item.code || item.promo_id)}>
+                <Button variant="danger" size="sm" onClick={() => handleDelete(item)}>
                   Delete
                 </Button>
               </td>
@@ -312,6 +325,19 @@ const AdminPanel = () => {
                 )}
               </Form.Group>
             ))}
+            {activeTab === 'users' && !modalData.id && (
+              <Form.Group className="mb-3">
+                <Form.Label>Password <span className="text-danger">*</span></Form.Label>
+                <Form.Control
+                  type="password"
+                  name="password"
+                  value={formData.password || ''}
+                  onChange={handleInputChange}
+                  minLength={8}
+                  required
+                />
+              </Form.Group>
+            )}
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setShowModal(false)}>

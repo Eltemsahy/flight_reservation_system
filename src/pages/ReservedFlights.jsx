@@ -1,39 +1,28 @@
 import { React, useState, useEffect } from 'react';
 import Navbar from "../components/Navbar";
-import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { cancelReservation, getMyFlights, logoutUser } from '../services/API';
 
 const ReservedFlights = () => {
   const [flights, setFlights] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const API_BASE_URL = 'http://127.0.0.1:8000';
-  const navigate = useNavigate();
-
   useEffect(() => {
     const fetchUserFlights = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('access_token'); // Changed from 'token' to 'access_token'
-        
-        if (!token) {
-          navigate('#');
+        if (!localStorage.getItem('authToken')) {
+          setError('Please sign in to view your reservations.');
           return;
         }
 
-        const response = await axios.get(`${API_BASE_URL}/flights/user-flights`, { // Changed endpoint
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
+        const response = await getMyFlights();
         setFlights(response.data);
       } catch (err) {
-        if (err.response && err.response.status === 401) {
-          localStorage.removeItem('access_token');
-          navigate('#');
+        if (err.message.includes('authentication') || err.message.includes('token')) {
+          logoutUser();
+          setError('Your session has expired. Please sign in again.');
         } else {
-          setError(err.response?.data?.detail || err.message || 'Failed to fetch flights');
+          setError(err.message || 'Failed to fetch flights');
         }
       } finally {
         setLoading(false);
@@ -41,19 +30,14 @@ const ReservedFlights = () => {
     };
 
     fetchUserFlights();
-  }, [navigate]);
+  }, []);
 
-  const cancelReservation = async (reservationId) => { // Changed from flightId to reservationId
+  const handleCancelReservation = async (reservationId) => {
     try {
-      const token = localStorage.getItem('access_token');
-      await axios.delete(`${API_BASE_URL}/reservations/${reservationId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      await cancelReservation(reservationId);
       setFlights(flights.filter(flight => flight.reservation_id !== reservationId));
     } catch (err) {
-      setError(err.response?.data?.detail || err.message || 'Failed to cancel reservation');
+      setError(err.message || 'Failed to cancel reservation');
     }
   };
 
@@ -146,7 +130,7 @@ const ReservedFlights = () => {
                     <div className="col-md-1">
                     <button
                       className="btn btn-danger btn-sm"
-                      onClick={() => cancelReservation(flight.reservation_id)} // Use reservation_id instead of flight.id
+                      onClick={() => handleCancelReservation(flight.reservation_id)}
                     >
                       Cancel
                     </button>

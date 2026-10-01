@@ -1,0 +1,49 @@
+# Stack: PostgreSQL (all logic) + PostgREST (turns the "api" schema into a REST API).
+# Copy .env.example to .env and fill in the two secrets first.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    # The two custom settings are read by SQL (JWT signing, authenticator password).
+    command: >
+      postgres
+      -c app.jwt_secret=${JWT_SECRET:?set JWT_SECRET in .env}
+      -c app.authenticator_password=${AUTHENTICATOR_PASSWORD:?set AUTHENTICATOR_PASSWORD in .env}
+    environment:
+      POSTGRES_USER: flights
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: flights
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Executed in this order the first time the volume is created:
+      - ./01_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./02_tables.sql:/docker-entrypoint-initdb.d/02_tables.sql:ro
+      - ./03_functions.sql:/docker-entrypoint-initdb.d/03_functions.sql:ro
+      - ./04_security.sql:/docker-entrypoint-initdb.d/04_security.sql:ro
+      - ./05_seed.sql:/docker-entrypoint-initdb.d/05_seed.sql:ro
+    healthcheck:
+      # -h 127.0.0.1 so it only passes once the real server (not the init-time one) is up
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U flights -d flights"]
+      interval: 5s
+      retries: 20
+
+  api:
+    image: postgrest/postgrest:v12.2.3
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${AUTHENTICATOR_PASSWORD}@db:5432/flights
+      PGRST_DB_SCHEMAS: api
+      PGRST_DB_ANON_ROLE: web_anon
+      PGRST_DB_PRE_REQUEST: private.pre_request
+      PGRST_DB_MAX_ROWS: "1000"
+      PGRST_JWT_SECRET: ${JWT_SECRET}
+
+volumes:
+  pgdata:

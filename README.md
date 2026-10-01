@@ -1,6 +1,6 @@
 # Flight Reservation System
 
-A full-stack web application for booking and managing flight reservations. Built with React frontend and FastAPI backend, featuring user authentication, flight search, seat selection, and reservation management.
+A flight reservation application with a React frontend and a PostgreSQL database exposed through PostgREST. Database schema, authentication, permissions and reservation rules are defined in SQL.
 
 ## Features
 
@@ -9,8 +9,8 @@ A full-stack web application for booking and managing flight reservations. Built
 - **Seat Selection**: Interactive seat map for flight reservations
 - **Reservation Management**: View and manage booked flights
 - **Admin Panel**: Administrative functions for managing flights, passengers, and data
-- **Real-time Updates**: CORS-enabled API for seamless frontend-backend communication
-- **Database Integration**: PostgreSQL database with SQLAlchemy ORM
+- **Database API**: PostgREST exposes PostgreSQL tables, views and RPC functions directly to the frontend
+- **Database Security**: JWT authentication and row-level security are enforced in PostgreSQL
 - **Responsive Design**: Modern React UI with CSS styling
 
 ## Tech Stack
@@ -25,17 +25,14 @@ A full-stack web application for booking and managing flight reservations. Built
 
 ### Backend
 
-- FastAPI (Python web framework)
-- SQLAlchemy (ORM)
-- PostgreSQL (database)
-- JWT (authentication)
-- Pydantic (data validation)
-- Uvicorn (ASGI server)
+- PostgreSQL 16+
+- PostgREST 12.2.3
+- SQL schema, business logic and access policies
 
 ## Prerequisites
 
-- Python 3.8+
-- PostgreSQL 13+
+- PostgreSQL 16+
+- PostgREST 12.2.3 (Windows x64 release)
 - Node.js 16+
 - npm or yarn
 
@@ -48,46 +45,31 @@ A full-stack web application for booking and managing flight reservations. Built
    cd flight-reservation-app
    ```
 
-2. **Backend Setup**
+2. **Database and API Setup (Windows, no Docker)**
+
+   Follow the native PostgreSQL/PostgREST setup in [Backend/README.md](Backend/README.md). It creates the local database, applies the SQL files, and starts PostgREST. Docker Compose remains available there as an optional setup.
+
+   The seeded admin account is `admin` / `Admin123`; change it after the first login.
+
+3. **Frontend Setup**
+
+   Open a separate PowerShell terminal at the project root, then run:
 
    ```bash
-   cd Backend
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-3. **Database Initialization**
-
-   Create a PostgreSQL database named `flight_reservation`, then set the connection URL before starting either backend. In PowerShell:
-
-   ```powershell
-   $env:DATABASE_URL = "postgresql+psycopg://postgres:your-password@localhost:5432/flight_reservation"
-   ```
-
-   Replace the username, password, host, port, and database name with your PostgreSQL settings. The FastAPI startup creates the schema from the current models; existing SQLite data is not imported.
-
-   ```bash
-   python db_init.py
-   python insertion.py  # Insert sample data
-   ```
-
-4. **Frontend Setup**
-   ```bash
-   cd ..
    npm install
    ```
 
+   The frontend uses `http://localhost:3000` by default. Set `VITE_POSTGREST_URL` in a local Vite environment file if PostgREST is hosted elsewhere.
+
 ## Running the Application
 
-1. **Start the Backend**
+1. **Start PostgreSQL and PostgREST**
 
-   ```bash
-   cd Backend
-   python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
-   ```
+   Start the PostgreSQL Windows service, then start PostgREST using the command in [Backend/README.md](Backend/README.md). Keep the PostgREST terminal open.
 
 2. **Start the Frontend**
+
+   In a separate terminal at the project root, run:
 
    ```bash
    npm run dev
@@ -95,35 +77,12 @@ A full-stack web application for booking and managing flight reservations. Built
 
 3. **Access the Application**
    - Frontend: http://localhost:5173
-   - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
+   - PostgREST API: http://localhost:3000
+   - PostgreSQL: localhost:5432
 
 ## API Endpoints
 
-### Authentication
-
-- `POST /token` - Login
-- `POST /register` - User registration
-- `GET /verify-token` - Token verification
-
-### Flights
-
-- `GET /flights` - List flights with filters
-- `POST /flights` - Create flight (admin)
-- `PUT /flights/{id}` - Update flight (admin)
-- `DELETE /flights/{id}` - Delete flight (admin)
-
-### Reservations
-
-- `POST /reservations` - Create reservation
-- `GET /flights/user-flights` - Get user's flights
-
-### Airports & Airlines
-
-- `GET /airports` - List airports
-- `GET /airlines` - List airlines
-- `POST /airports` - Create airport (admin)
-- `POST /airlines` - Create airline (admin)
+The PostgREST routes and RPC request bodies are documented in [Backend/README.md](Backend/README.md). The API root (`http://localhost:3000/`) returns its OpenAPI description.
 
 ## Database Schema
 
@@ -141,31 +100,23 @@ The application uses the following main entities:
 - Tickets
 - Promotions
 
-## Scripts
-
-Located in the `scripts/` directory:
-
-- `initialize_db.py` - Initialize database
-- `insert_sample_data.py` - Insert sample data
-- `test_db.py` - Test database connections
-- `generate-heatmap.py` - Generate flight data heatmap
-
 ## Project Structure
 
 ```
 flight-reservation-app/
 ├── Backend/
-│   ├── main.py              # FastAPI application
-│   ├── models.py            # SQLAlchemy models
-│   ├── schemas.py           # Pydantic schemas
-│   ├── database.py          # Database configuration
-│   └── db_init.py           # Database initialization
+│   ├── docker-compose.yml   # Optional PostgreSQL + PostgREST containers
+│   ├── postgrest.conf.example # Native PostgREST settings
+│   ├── 01_init.sql          # Roles and schemas
+│   ├── 02_tables.sql        # Tables and constraints
+│   ├── 03_functions.sql     # Business logic and RPCs
+│   ├── 04_security.sql      # Grants and row-level security
+│   └── 05_seed.sql          # Initial reference data
 ├── src/
 │   ├── components/          # React components
 │   ├── pages/               # Application pages
 │   ├── services/            # API services
 │   └── assets/              # Static assets
-├── scripts/                 # Utility scripts
 ├── public/                  # Public assets
 └── package.json             # Frontend dependencies
 ```

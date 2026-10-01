@@ -1,8 +1,17 @@
 import React from 'react';
 import { format, formatDuration, intervalToDuration } from 'date-fns';
-import axios from 'axios';
+import { Alert, Button, Form, Modal } from 'react-bootstrap';
+import { createPassenger, createReservation, getAvailableSeats, getPassengers } from '../services/API';
 
-const FlightCard = ({ flight, isLoggedIn, username }) => {
+const FlightCard = ({ flight }) => {
+  const [showBooking, setShowBooking] = React.useState(false);
+  const [passengers, setPassengers] = React.useState([]);
+  const [seats, setSeats] = React.useState([]);
+  const [passengerId, setPassengerId] = React.useState('');
+  const [seatNumber, setSeatNumber] = React.useState('');
+  const [newPassenger, setNewPassenger] = React.useState({ name: '', email: '', phone_number: '', nationality: '' });
+  const [bookingError, setBookingError] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
   if (!flight || !flight.id) {
     return (
       <div className="card h-100 shadow-sm">
@@ -31,38 +40,60 @@ const FlightCard = ({ flight, isLoggedIn, username }) => {
   } catch (e) {
     console.error('Date parsing error:', e);
   }
-  const randomSeat = () => {
-    const row = Math.floor(Math.random() * 30) + 1; // 1-30
-    const letter = String.fromCharCode(65 + Math.floor(Math.random() * 6)); // A-F
-    return `${row}${letter}`;
-  };
-
   const handleReserve = async () => {
     try {
-      if (!isLoggedIn || !username) {
+      if (!localStorage.getItem('authToken')) {
         alert('Please log in to reserve.');
         return;
       }
-      await axios.post('http://127.0.0.1:8000/reservations/', {
-        username: username, // <-- must be defined and not empty
-        flight_id: flight.id,
-        seat_number: randomSeat(),
-        status: 'Pending'
-      });
-      alert('Reservation successful!');
+      const [passengerResponse, seatResponse] = await Promise.all([
+        getPassengers(),
+        getAvailableSeats(flight.id),
+      ]);
+      setPassengers(passengerResponse.data);
+      setSeats(seatResponse.data);
+      setPassengerId(String(passengerResponse.data[0]?.id || ''));
+      setSeatNumber(seatResponse.data[0]?.seat_number || '');
+      setBookingError('');
+      setShowBooking(true);
     } catch (err) {
-      console.error('Reservation error:', err);
-      if (err.response) {
-        console.error('Backend error data:', err.response.data);
-        alert(
-          'Reservation failed: ' +
-          (err.response.data.detail ||
-            JSON.stringify(err.response.data) ||
-            err.message)
-        );
-      } else {
-        alert('Reservation failed: ' + err.message);
-      }
+      alert(`Could not prepare booking: ${err.message}`);
+    }
+  };
+
+  const handleCreatePassenger = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setBookingError('');
+    try {
+      const { data } = await createPassenger(newPassenger);
+      const createdPassenger = data[0];
+      setPassengers((current) => [...current, createdPassenger]);
+      setPassengerId(String(createdPassenger.id));
+      setNewPassenger({ name: '', email: '', phone_number: '', nationality: '' });
+    } catch (err) {
+      setBookingError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBookingSubmit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setBookingError('');
+    try {
+      await createReservation({
+        passenger_id: Number(passengerId),
+        flight_id: flight.id,
+        seat_number: seatNumber,
+      });
+      setShowBooking(false);
+      alert('Reservation successful.');
+    } catch (err) {
+      setBookingError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -112,6 +143,66 @@ const FlightCard = ({ flight, isLoggedIn, username }) => {
         </button>
         </div>
       </div>
+      <Modal show={showBooking} onHide={() => setShowBooking(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Book {flight_number}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+            {bookingError && <Alert variant="danger">{bookingError}</Alert>}
+            {passengers.length > 0 ? (
+              <Form.Group className="mb-3">
+                <Form.Label>Passenger</Form.Label>
+                <Form.Select value={passengerId} onChange={(event) => setPassengerId(event.target.value)} required>
+                  {passengers.map((passenger) => (
+                    <option key={passenger.id} value={passenger.id}>{passenger.name}</option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            ) : (
+              <Alert variant="info">Create a passenger profile to continue with this booking.</Alert>
+            )}
+            {passengers.length === 0 && (
+              <Form onSubmit={handleCreatePassenger}>
+                {['name', 'email', 'phone_number', 'nationality'].map((field) => (
+                  <Form.Group className="mb-3" key={field}>
+                    <Form.Label>{field.replace('_', ' ')}</Form.Label>
+                    <Form.Control
+                      type={field === 'email' ? 'email' : 'text'}
+                      value={newPassenger[field]}
+                      onChange={(event) => setNewPassenger({ ...newPassenger, [field]: event.target.value })}
+                      required
+                    />
+                  </Form.Group>
+                ))}
+                <Button type="submit" variant="outline-primary" disabled={saving}>Create passenger</Button>
+              </Form>
+            )}
+            {seats.length === 0 ? (
+              <Alert variant="warning" className="mt-3">No seats are currently available.</Alert>
+            ) : (
+              <Form.Group className="mb-3">
+                <Form.Label>Available seat</Form.Label>
+                <Form.Select value={seatNumber} onChange={(event) => setSeatNumber(event.target.value)} required>
+                  {seats.map((seat) => (
+                    <option key={seat.seat_number} value={seat.seat_number}>
+                      {seat.seat_number} - {seat.class_type}
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowBooking(false)}>Close</Button>
+          <Button
+            type="button"
+            onClick={handleBookingSubmit}
+            disabled={saving || !passengers.length || !seats.length}
+          >
+            {saving ? 'Booking...' : 'Confirm booking'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

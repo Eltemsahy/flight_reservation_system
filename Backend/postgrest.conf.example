@@ -1,0 +1,5 @@
+db-schemas = "api"
+db-anon-role = "web_anon"
+db-pre-request = "private.pre_request"
+db-max-rows = 1000
+server-port = 3000
